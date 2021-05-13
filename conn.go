@@ -255,9 +255,10 @@ type Conn struct {
 	writeErrMu sync.Mutex
 	writeErr   error
 
-	enableWriteCompression bool
-	compressionLevel       int
-	newCompressionWriter   func(io.WriteCloser, int) io.WriteCloser
+	allowReadControlMessages bool
+	enableWriteCompression   bool
+	compressionLevel         int
+	newCompressionWriter     func(io.WriteCloser, int) io.WriteCloser
 
 	// Read fields
 	reader  io.ReadCloser // the current reader returned to the application
@@ -355,7 +356,6 @@ func (c *Conn) RemoteAddr() net.Addr {
 }
 
 // Write methods
-
 func (c *Conn) writeFatal(err error) error {
 	err = hideTempErr(err)
 	c.writeErrMu.Lock()
@@ -991,6 +991,9 @@ func (c *Conn) NextReader() (messageType int, r io.Reader, err error) {
 			}
 			return frameType, c.reader, nil
 		}
+		if c.allowReadControlMessages {
+			return frameType, nil, c.readErr
+		}
 	}
 
 	// Applications that do handle the error returned from this method spin in
@@ -1075,6 +1078,12 @@ func (c *Conn) ReadMessage() (messageType int, p []byte, err error) {
 // not time out.
 func (c *Conn) SetReadDeadline(t time.Time) error {
 	return c.conn.SetReadDeadline(t)
+}
+
+// AllowReadControlMessages allows the ReadMessage method to return ControlMessage
+// without having to wait for TextMessage And BinaryMessage
+func (c *Conn) AllowReadControlMessages() {
+	c.allowReadControlMessages = true
 }
 
 // SetReadLimit sets the maximum size in bytes for a message read from the peer. If a
